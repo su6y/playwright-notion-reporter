@@ -1,0 +1,33 @@
+name: Playwright Notion Reporter
+description: Send Playwright JSON test results to a Notion database
+author: ""
+
+branding:
+  icon: upload-cloud
+  color: gray-dark
+
+inputs:
+  notion-token:
+    description: Notion integration token
+    required: true
+  database-id:
+    description: Notion database ID to write results to
+    required: true
+  report-path:
+    description: Path to Playwright JSON report file
+    required: false
+    default: results.json
+  product:
+    description: Product name (optional, creates a select property in the database)
+    required: false
+  test-type:
+    description: Test type such as e2e, smoke, regression (optional, creates a select property in the database)
+    required: false
+
+outputs:
+  entries-created:
+    description: Number of test result entries created in Notion
+
+runs:
+  using: node24
+  main: dist/main.mjs
