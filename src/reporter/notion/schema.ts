@@ -107,7 +107,13 @@ export async function reorderViewColumns(
 
   const ordered = desiredOrder
     .map((name) =>
-      props[name] ? { property_id: props[name].id, visible: true, width: COLUMN_WIDTH } : null,
+      props[name]
+        ? {
+            property_id: props[name].id,
+            visible: true,
+            width: name === titleProperty ? undefined : COLUMN_WIDTH,
+          }
+        : null,
     )
     .filter((v): v is NonNullable<typeof v> => v !== null);
 
