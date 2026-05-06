@@ -1,5 +1,5 @@
 import type { Client } from "@notionhq/client";
-import { RATE_LIMIT_MS, sleep } from "./constants.ts";
+import { COLUMN_WIDTH, PROPERTY_NAMES, RATE_LIMIT_MS, STATUS, sleep } from "./constants.ts";
 
 export interface ResolveOptions {
   product?: string;
@@ -17,55 +17,61 @@ export async function resolveDataSource(
   }
   const dataSourceId = db.data_sources[0].id;
 
-  const ds = await client.dataSources.retrieve({
-    data_source_id: dataSourceId,
-  });
+  const ds = await client.dataSources.retrieve({ data_source_id: dataSourceId });
   const existing = ds.properties as Record<
     string,
     { type: string; select?: { options: Array<{ name: string }> } }
   >;
 
-  let titleProperty = "Name";
-  for (const [name, prop] of Object.entries(existing)) {
-    if (prop.type === "title") {
-      titleProperty = name;
-      break;
-    }
-  }
+  const titleProperty = detectTitleProperty(existing);
+  await ensureSchemaProperties(client, dataSourceId, existing, options);
+  await reorderViewColumns(client, databaseId, dataSourceId, titleProperty);
 
-  // Build properties to create or update
+  return { dataSourceId, titleProperty };
+}
+
+export function detectTitleProperty(properties: Record<string, { type: string }>): string {
+  for (const [name, prop] of Object.entries(properties)) {
+    if (prop.type === "title") return name;
+  }
+  return "Name";
+}
+
+export async function ensureSchemaProperties(
+  client: Client,
+  dataSourceId: string,
+  existing: Record<string, { type: string }>,
+  options: ResolveOptions,
+): Promise<void> {
   const toUpdate: Record<string, Record<string, unknown>> = {};
   const existingNames = new Set(Object.keys(existing));
 
-  // Fixed properties — only add if missing
   const fixed: Record<string, Record<string, unknown>> = {
-    Status: {
+    [PROPERTY_NAMES.STATUS]: {
       select: {
         options: [
-          { name: "passed", color: "green" },
-          { name: "failed", color: "red" },
+          { name: STATUS.PASSED, color: "green" },
+          { name: STATUS.FAILED, color: "red" },
         ],
       },
     },
-    "Duration (s)": { number: {} },
-    Passed: { number: {} },
-    Failed: { number: {} },
-    Skipped: { number: {} },
-    Flaky: { number: {} },
+    [PROPERTY_NAMES.DURATION]: { number: {} },
+    [PROPERTY_NAMES.PASSED]: { number: {} },
+    [PROPERTY_NAMES.FAILED]: { number: {} },
+    [PROPERTY_NAMES.SKIPPED]: { number: {} },
+    [PROPERTY_NAMES.FLAKY]: { number: {} },
   };
   for (const [name, schema] of Object.entries(fixed)) {
     if (!existingNames.has(name)) toUpdate[name] = schema;
   }
 
-  // Optional select properties — create if missing, or add new option value
   const optionalSelects: Record<string, string | undefined> = {
-    Product: options.product,
-    "Test Type": options.testType,
+    [PROPERTY_NAMES.PRODUCT]: options.product,
+    [PROPERTY_NAMES.TEST_TYPE]: options.testType,
   };
   for (const [propName, value] of Object.entries(optionalSelects)) {
     if (!value) continue;
     if (!existingNames.has(propName)) {
-      // Property doesn't exist → create empty select (Notion auto-assigns colors on page creation)
       toUpdate[propName] = { select: {} };
     }
   }
@@ -77,28 +83,31 @@ export async function resolveDataSource(
     });
     await sleep(RATE_LIMIT_MS);
   }
+}
 
-  // Reorder view columns
+export async function reorderViewColumns(
+  client: Client,
+  databaseId: string,
+  dataSourceId: string,
+  titleProperty: string,
+): Promise<void> {
   const latest = await client.dataSources.retrieve({ data_source_id: dataSourceId });
   const props = latest.properties as Record<string, { id: string; type: string }>;
-  const desiredOrder = [titleProperty, "Status"];
-  if (props.Product) desiredOrder.push("Product");
-  if (props["Test Type"]) desiredOrder.push("Test Type");
-  desiredOrder.push("Duration (s)", "Passed", "Failed", "Skipped", "Flaky");
 
-  const widths: Record<string, number> = {
-    Status: 112,
-    "Duration (s)": 112,
-    Product: 112,
-    "Test Type": 112,
-    Passed: 112,
-    Failed: 112,
-    Skipped: 112,
-    Flaky: 112,
-  };
+  const desiredOrder = [titleProperty, PROPERTY_NAMES.STATUS];
+  if (props[PROPERTY_NAMES.PRODUCT]) desiredOrder.push(PROPERTY_NAMES.PRODUCT);
+  if (props[PROPERTY_NAMES.TEST_TYPE]) desiredOrder.push(PROPERTY_NAMES.TEST_TYPE);
+  desiredOrder.push(
+    PROPERTY_NAMES.DURATION,
+    PROPERTY_NAMES.PASSED,
+    PROPERTY_NAMES.FAILED,
+    PROPERTY_NAMES.SKIPPED,
+    PROPERTY_NAMES.FLAKY,
+  );
+
   const ordered = desiredOrder
     .map((name) =>
-      props[name] ? { property_id: props[name].id, visible: true, width: widths[name] } : null,
+      props[name] ? { property_id: props[name].id, visible: true, width: COLUMN_WIDTH } : null,
     )
     .filter((v): v is NonNullable<typeof v> => v !== null);
 
@@ -110,6 +119,4 @@ export async function resolveDataSource(
     });
     await sleep(RATE_LIMIT_MS);
   }
-
-  return { dataSourceId, titleProperty };
 }

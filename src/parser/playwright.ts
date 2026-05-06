@@ -1,4 +1,5 @@
-import type { PlaywrightJsonReport, PlaywrightSuite, TestEntry } from "../types.ts";
+import type { PlaywrightJsonReport, PlaywrightSuite } from "./types.ts";
+import type { TestEntry } from "../reporter/types.ts";
 
 export function parseReport(report: PlaywrightJsonReport): TestEntry[] {
   const entries: TestEntry[] = [];
