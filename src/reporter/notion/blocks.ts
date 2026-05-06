@@ -1,6 +1,6 @@
-import type { TestEntry } from "../../types.ts";
+import type { TestEntry } from "../types.ts";
+import { MAX_RICH_TEXT, STATUS } from "./constants.ts";
 
-const MAX_RICH_TEXT = 2000;
 // oxlint-disable-next-line no-control-regex -- intentional ANSI escape matching
 const ANSI_REGEX = /\u001b\[[0-9;]*m/g;
 
@@ -16,13 +16,13 @@ export function truncate(text: string, max: number = MAX_RICH_TEXT): string {
 
 export function statusEmoji(status: string): string {
   switch (status) {
-    case "passed":
+    case STATUS.PASSED:
       return "✅";
-    case "failed":
+    case STATUS.FAILED:
       return "❌";
-    case "timedOut":
+    case STATUS.TIMED_OUT:
       return "⏰";
-    case "skipped":
+    case STATUS.SKIPPED:
       return "⏭️";
     default:
       return "❓";
